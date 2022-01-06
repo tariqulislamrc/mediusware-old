@@ -17,7 +17,9 @@ class ProductController extends Controller
      */
     public function index()
     {
-        return view('products.index');
+        $data['products'] = Product::with(['variantPrices.productVariantOne', 'variantPrices.productVariantTwo', 'variantPrices.productVariantThree'])->latest()->paginate(2);
+        $data['variants'] = Variant::latest()->get();
+        return view('products.index', $data);
     }
 
     /**
