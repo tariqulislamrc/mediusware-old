@@ -8,17 +8,19 @@
 
 
     <div class="card">
-        <form action="" method="get" class="card-header">
+        <form action="{{ route('product.index') }}" method="get" class="card-header">
             <div class="form-row justify-content-between">
                 <div class="col-md-2">
-                    <input type="text" name="title" placeholder="Product Title" class="form-control">
+                    <input type="text" name="title" placeholder="Product Title" class="form-control"
+                           value="{{ request('title') }}">
                 </div>
                 <div class="col-md-2">
                     <select name="variant" id="" class="form-control" data-placeholder="Select Variant">
                         <option value="">Select Variant</option>
                         </option>
                         @foreach($variants as $variant)
-                            <option value="{{ $variant->id }}">{{ $variant->title }}</option>
+                            <option
+                                value="{{ $variant->variant }}" {{ request('variant') == $variant->variant ? 'selected' : '' }}>{{ $variant->variant }}</option>
                         @endforeach
 
                     </select>
@@ -29,15 +31,19 @@
                         <div class="input-group-prepend">
                             <span class="input-group-text">Price Range</span>
                         </div>
-                        <input type="text" name="price_from" aria-label="First name" placeholder="From"
-                               class="form-control">
-                        <input type="text" name="price_to" aria-label="Last name" placeholder="To" class="form-control">
+                        <input type="text" name="price_from" aria-label="Price form" placeholder="From"
+                               class="form-control" value="{{ request('price_from') }}">
+                        <input type="text" name="price_to" aria-label="Price to" placeholder="To" class="form-control"
+                               value="{{ request('price_to') }}">
                     </div>
                 </div>
                 <div class="col-md-2">
-                    <input type="date" name="date" placeholder="Date" class="form-control">
+                    <input type="date" name="date" placeholder="Date" class="form-control"
+                           value="{{ request('date') }}">
                 </div>
                 <div class="col-md-1">
+                    <a href="{{ route('product.index') }}" class="btn btn-secondary float-right ml-2"><i
+                            class="fa fa-undo"></i></a>
                     <button type="submit" class="btn btn-primary float-right"><i class="fa fa-search"></i></button>
                 </div>
             </div>
@@ -86,9 +92,11 @@
                                     @endforeach
 
                                 </dl>
-                                <button onclick="$('#variant_{{ $product->id }}').toggleClass('h-auto')"
-                                        class="btn btn-sm btn-link">Show more
-                                </button>
+                                @if($product->variantPrices->count() > 2)
+                                    <button onclick="$('#variant_{{ $product->id }}').toggleClass('h-auto')"
+                                            class="btn btn-sm btn-link">Show more
+                                    </button>
+                                @endif
                             </td>
                             <td>
                                 <div class="btn-group btn-group-sm">
