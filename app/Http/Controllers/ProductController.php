@@ -2,7 +2,9 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Requests\ProductRequest;
 use App\Models\Product;
+use App\Models\ProductImage;
 use App\Models\ProductVariant;
 use App\Models\ProductVariantPrice;
 use App\Models\Variant;
@@ -47,8 +49,9 @@ class ProductController extends Controller
             })
             ->latest()->paginate(2);
 
-
-        $data['variants'] = ProductVariant::latest()->get()->unique('variant');
+        $data['variants'] = Variant::latest()->with(['productVariants' => function ($q) {
+            return $q->groupBy('variant');
+        }])->whereHas('productVariants')->get();
         return view('products.index', $data);
     }
 
@@ -71,8 +74,61 @@ class ProductController extends Controller
      * @return \Illuminate\Http\JsonResponse
      */
     public
-    function store(Request $request)
+    function store(ProductRequest $request)
     {
+        $product = Product::create($request->only('title', 'description', 'sku'));
+
+        if ($request->product_image) {
+            foreach ($request->product_image as $image) {
+                $fileName = date('Ymd') . '-' . uniqid() . '.' . $image->getClientOriginalExtension();
+                $image->move('upload', $fileName);
+                ProductImage::query()->create([
+
+                    'product_id' => $product->id,
+                    'file_path' => 'upload/' . $fileName,
+                    'thumbnail' => true
+
+                ]);
+            }
+        }
+
+        $tags = [];
+
+        foreach ($request->product_variant as $key => $variant) {
+            foreach ($variant['tags'] as $tag_key => $tag) {
+                $productVariant = ProductVariant::create([
+                    'variant' => $tag,
+                    'product_id' => $product->id,
+                    'variant_id' => $variant['option'] ?? null
+                ]);
+                $tags[$key][$tag] = $productVariant->id;
+            }
+        }
+
+        foreach ($request->product_variant_prices as $product_variant_price) {
+            $title = explode('/', rtrim($product_variant_price['title'], '/'));
+            $productVariantPrice = [
+                'price' => $product_variant_price['price'],
+                'stock' => $product_variant_price['stock'],
+                'product_id' => $product->id,
+            ];
+
+            foreach ($title as $key => $data) {
+                if ($key == 0) {
+                    $productVariantPrice['product_variant_one'] = $tags[$key][$data];
+                }
+                if ($key == 1) {
+                    $productVariantPrice['product_variant_two'] = $tags[$key][$data];
+                }
+                if ($key == 2) {
+                    $productVariantPrice['product_variant_three'] = $tags[$key][$data];
+                }
+            }
+
+            ProductVariantPrice::create($productVariantPrice);
+        }
+
+        return response()->json(['success' => 'Product created successfully.']);
 
     }
 

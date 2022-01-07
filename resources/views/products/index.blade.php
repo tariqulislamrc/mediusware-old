@@ -19,9 +19,13 @@
                         <option value="">Select Variant</option>
                         </option>
                         @foreach($variants as $variant)
-                            <option
-                                value="{{ $variant->variant }}" {{ request('variant') == $variant->variant ? 'selected' : '' }}>{{ $variant->variant }}</option>
-                        @endforeach
+                            <optgroup label="{{ $variant->title }}">
+                            @foreach($variant->productVariants as $productVariant)
+                                <option
+                                    value="{{ $productVariant->variant }}" {{ request('variant') == $productVariant->variant ? 'selected' : '' }}>{{ $productVariant->variant }}</option>
+                            @endforeach
+                            </optgroup>
+                            @endforeach
 
                     </select>
                 </div>

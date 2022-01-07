@@ -6,6 +6,14 @@ use Illuminate\Database\Eloquent\Model;
 
 class ProductVariantPrice extends Model
 {
+    protected $fillable = [
+        'price',
+        'stock',
+        'product_id',
+        'product_variant_one',
+        'product_variant_two',
+        'product_variant_three'
+        ];
     public function productVariantOne(): \Illuminate\Database\Eloquent\Relations\BelongsTo
     {
         return $this->belongsTo(ProductVariant::class, 'product_variant_one', 'id');
