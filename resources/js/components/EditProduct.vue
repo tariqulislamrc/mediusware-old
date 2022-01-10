@@ -6,15 +6,18 @@
                     <div class="card-body">
                         <div class="form-group">
                             <label for="product_name">Product Name</label>
-                            <input type="text" v-model="product_name" placeholder="Product Name" class="form-control" id="product_name">
+                            <input type="text" v-model="product_name" placeholder="Product Name" class="form-control"
+                                   id="product_name">
                         </div>
                         <div class="form-group">
                             <label for="product_sku">Product SKU</label>
-                            <input type="text" v-model="product_sku" placeholder="Product Name" class="form-control" id="product_sku">
+                            <input type="text" v-model="product_sku" placeholder="Product Name" class="form-control"
+                                   id="product_sku">
                         </div>
                         <div class="form-group">
                             <label for="description">Description</label>
-                            <textarea v-model="description" id="description" cols="30" rows="4" class="form-control"></textarea>
+                            <textarea v-model="description" id="description" cols="30" rows="4"
+                                      class="form-control"></textarea>
                         </div>
                     </div>
                 </div>
@@ -24,7 +27,9 @@
                         <h6 class="m-0 font-weight-bold text-primary">Media</h6>
                     </div>
                     <div class="card-body border">
-                        <vue-dropzone ref="myVueDropzone" id="dropzone" :options="dropzoneOptions"  @vdropzone-success="dropzoneAfterSuccess" @vdropzone-mounted="dropzoneMounted"></vue-dropzone>
+                        <vue-dropzone ref="myVueDropzone" id="dropzone" :options="dropzoneOptions"
+                                      @vdropzone-success="dropzoneAfterSuccess"
+                                      @vdropzone-mounted="dropzoneMounted"></vue-dropzone>
                     </div>
                 </div>
             </div>
@@ -49,16 +54,19 @@
                             </div>
                             <div class="col-md-8">
                                 <div class="form-group">
-                                    <label v-if="product_variant.length != 1" @click="product_variant.splice(index,1); checkVariant"
+                                    <label v-if="product_variant.length != 1"
+                                           @click="product_variant.splice(index,1); checkVariant"
                                            class="float-right text-primary"
                                            style="cursor: pointer;">Remove</label>
                                     <label v-else for="item_tags">.</label>
-                                    <input-tag v-model="item.tags" @input="checkVariant" class="form-control" id="item_tags"></input-tag>
+                                    <input-tag v-model="item.tags" @input="checkVariant" class="form-control"
+                                               id="item_tags"></input-tag>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer" v-if="product_variant.length < variants.length && product_variant.length < 3">
+                    <div class="card-footer"
+                         v-if="product_variant.length < variants.length && product_variant.length < 3">
                         <button @click="newVariant" class="btn btn-primary">Add another option</button>
                     </div>
 
@@ -134,15 +142,17 @@ export default {
     },
     methods: {
         dropzoneAfterSuccess(file) {
-            console.log(file)
             this.images.push(file.dataURL)
         },
         dropzoneMounted() {
             this.product.images.forEach(image => {
-                const file = { name: image.title, type: image.type, dataURL: image.file_url, size: image.size };
-                this.$refs.myVueDropzone.manuallyAddFile(file, image.file_url, );
-                this.$refs.myVueDropzone.dropzone.emit('thumbnail', file, file.dataURL)
-                this.images.push(image.base)
+                if (image.length > 0) {
+                    const file = {name: image.title, type: image.type, dataURL: image.file_url, size: image.size};
+                    this.$refs.myVueDropzone.manuallyAddFile(file, image.file_url,);
+                    this.$refs.myVueDropzone.dropzone.emit('thumbnail', file, file.dataURL)
+                    this.images.push(image.base)
+                }
+
             });
         },
         // it will push a new object into product variant
@@ -203,22 +213,23 @@ export default {
             }
 
 
-            axios.put('/product/'+this.product.id, product).then(response => {
+            axios.put('/product/' + this.product.id, product).then(response => {
                 toastr.success(response.data.message);
+                console.log(response.data)
                 setTimeout(function () {
-                    window.location.href = '/product';
+                    window.location.href = response.data.goto;
                 }, 2000)
             }).catch(error => {
-                console.log(error);
+                toastr.error(error.response.data.message);
+                _.each(error.response.data.errors, function (value, key) {
+                    toastr.error(value);
+                });
             })
-
-            console.log(product);
         }
 
 
     },
     mounted() {
-
 
     }
 }

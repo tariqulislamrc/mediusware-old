@@ -10,21 +10,25 @@ use App\Models\ProductVariant;
 use App\Models\ProductVariantPrice;
 use App\Models\Variant;
 use Carbon\Carbon;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Contracts\View\Factory;
 use Illuminate\Http\Request;
-use Illuminate\Http\UploadedFile;
-use Illuminate\Support\Str;
-use Symfony\Component\HttpFoundation\File\File;
+
+use Illuminate\Http\Response;
 use Illuminate\Support\Facades\File as StorageFile;
+use Illuminate\Support\Facades\URL;
+use Illuminate\View\View;
 
 class ProductController extends Controller
 {
     /**
      * Display a listing of the resource.
      *
-     * @return \Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\View\Factory|\Illuminate\Http\Response|\Illuminate\View\View
+     * @return Application|Factory|Response|View
      */
     public function index()
     {
+        session()->put('product_index_url', URL::full());
         $data['products'] = Product::with(['variantPrices.productVariantOne', 'variantPrices.productVariantTwo', 'variantPrices.productVariantThree'])
             ->when(request('title'), function ($q) {
                 $q->where('title', 'like', '%' . request('title') . '%');
@@ -45,11 +49,13 @@ class ProductController extends Controller
                         return $q->where('variant', request('variant'));
                     });
             })
-            ->whereHas('variantPrices', function ($q) {
-                return $q->when(request('price_from'), function ($query) {
-                    return $query->where('price', '>=', request('price_from'));
-                })->when(request('price_to'), function ($query) {
-                    return $query->where('price', '<=', request('price_to'));
+            ->when(request('price_from') || request('price_to'), function ($q) {
+                $q->whereHas('variantPrices', function ($q) {
+                    return $q->when(request('price_from'), function ($query) {
+                        return $query->where('price', '>=', request('price_from'));
+                    })->when(request('price_to'), function ($query) {
+                        return $query->where('price', '<=', request('price_to'));
+                    });
                 });
             })
             ->latest()->paginate(2);
@@ -63,7 +69,7 @@ class ProductController extends Controller
     /**
      * Show the form for creating a new resource.
      *
-     * @return \Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\View\Factory|\Illuminate\Http\Response|\Illuminate\View\View
+     * @return Application|Factory|View
      */
     public
     function create()
@@ -83,55 +89,11 @@ class ProductController extends Controller
     {
         $product = Product::create($request->only('title', 'description', 'sku'));
 
-        if ($request->product_image) {
-            foreach ($request->product_image as $image) {
-                $fileName = date('Ymd') . '-' . uniqid() . '.' . $image->getClientOriginalExtension();
-                $image->move('upload', $fileName);
-                ProductImage::query()->create([
+        $this->uploadProductImages($request->product_image, $product);
 
-                    'product_id' => $product->id,
-                    'file_path' => 'upload/' . $fileName,
-                    'thumbnail' => true
+        $tags = $this->productVariant($request->product_variant, $product);
 
-                ]);
-            }
-        }
-
-        $tags = [];
-
-        foreach ($request->product_variant as $key => $variant) {
-            foreach ($variant['tags'] as $tag_key => $tag) {
-                $productVariant = ProductVariant::create([
-                    'variant' => $tag,
-                    'product_id' => $product->id,
-                    'variant_id' => $variant['option'] ?? null
-                ]);
-                $tags[$key][$tag] = $productVariant->id;
-            }
-        }
-
-        foreach ($request->product_variant_prices as $product_variant_price) {
-            $title = explode('/', rtrim($product_variant_price['title'], '/'));
-            $productVariantPrice = [
-                'price' => $product_variant_price['price'],
-                'stock' => $product_variant_price['stock'],
-                'product_id' => $product->id,
-            ];
-
-            foreach ($title as $key => $data) {
-                if ($key == 0) {
-                    $productVariantPrice['product_variant_one'] = $tags[$key][$data];
-                }
-                if ($key == 1) {
-                    $productVariantPrice['product_variant_two'] = $tags[$key][$data];
-                }
-                if ($key == 2) {
-                    $productVariantPrice['product_variant_three'] = $tags[$key][$data];
-                }
-            }
-
-            ProductVariantPrice::create($productVariantPrice);
-        }
+        $this->productVariantPrice($request->product_variant_prices, $product, $tags);
 
         return response()->json(['message' => 'Product created successfully.']);
 
@@ -142,7 +104,7 @@ class ProductController extends Controller
      * Display the specified resource.
      *
      * @param \App\Models\Product $product
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public
     function show($product)
@@ -154,12 +116,12 @@ class ProductController extends Controller
      * Show the form for editing the specified resource.
      *
      * @param \App\Models\Product $product
-     * @return \Illuminate\Http\Response
+     * @return Response
      */
     public
     function edit($product)
     {
-        $product = new ProductResource(Product::with(['images', 'productVariants', 'variantPrices'])->find($product));
+        $product = new ProductResource(Product::with(['images', 'variantPrices.productVariantOne', 'variantPrices.productVariantTwo', 'variantPrices.productVariantThree', 'productVariants'])->find($product));
 
         $variants = Variant::all();
         return view('products.edit', compact('variants', 'product'));
@@ -170,81 +132,72 @@ class ProductController extends Controller
      *
      * @param \Illuminate\Http\Request $request
      * @param \App\Models\Product $product
-     * @return \Illuminate\Http\Response
+     * @return \Illuminate\Http\JsonResponse
      */
     public
-    function update(Request $request, Product $product)
+    function update(ProductRequest $request, Product $product)
     {
         $product->update($request->only('title', 'description', 'sku'));
 
-        if ($request->product_image) {
-           foreach($product->images as $image){
-               StorageFile::delete(storage_path($image->file_path, 'public'));
-               $image->delete();
-           }
-            foreach ($request->product_image as $image) {
-                $base64File = $image;
-
-                $fileData = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $base64File));
-
-                $tmpFilePath = sys_get_temp_dir() . '/' . Str::uuid()->toString();
-                file_put_contents($tmpFilePath, $fileData);
-
-                $tmpFile = new File($tmpFilePath);
-
-                $file = new UploadedFile(
-                    $tmpFile->getPathname(),
-                    $tmpFile->getFilename(),
-                    $tmpFile->getMimeType(),
-                    0,
-                    true // Mark it as test, since the file isn't from real HTTP POST.
-                );
-
-                $file_path =  $file->store('products', 'public');
-
-                ProductImage::create([
-                    'product_id' => $product->id,
-                    'file_path' => $file_path
-                ]);
-            }
+        foreach ($product->images as $image) {
+            StorageFile::delete(storage_path($image->file_path, 'public'));
+            $image->delete();
         }
+        $this->uploadProductImages($request->product_image, $product);
 
+        $tags = $this->productVariant($request->product_variant, $product, true);
+
+        $this->productVariantPrice($request->product_variant_prices, $product, $tags, true);
+
+        return response()->json(['message' => 'Product updated successfully.', 'goto' => session('product_index_url', route('product.index'))]);
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     *
+     * @param \App\Models\Product $product
+     * @return Response
+     */
+    public
+    function destroy(Product $product)
+    {
+        //
+    }
+
+
+    private function productVariant($product_variant, $product, $update = false): array
+    {
         $tags = [];
-
-
-        foreach ($request->product_variant as $key => $variant) {
+        foreach ($product_variant as $key => $variant) {
             $updateProductVariant = [];
-            foreach ($variant['tags'] as $tag_key => $tag) {
+            foreach ($variant['tags'] as $tag) {
                 $productVariant = ProductVariant::firstOrCreate([
                     'variant' => $tag,
                     'product_id' => $product->id,
-                    'variant_id' => $variant['option'] ?? null
+                    'variant_id' => $variant['option']
                 ]);
                 $tags[$key][$tag] = $productVariant->id;
                 $updateProductVariant [] = $productVariant->id;
             }
-
-            ProductVariant::whereNotIn('id', $updateProductVariant)->where('product_id', $product->id)->where('variant_id', $variant['option'] ?? null)->delete();
+            if ($update) {
+                ProductVariant::whereNotIn('id', $updateProductVariant)->where('product_id', $product->id)->where('variant_id', $variant['option'] ?? null)->delete();
+            }
         }
+        return $tags;
+    }
 
-
+    private function productVariantPrice($product_variant_prices, $product, array $tags, $update = false)
+    {
         $updatedVariantPrices = [];
-        foreach ($request->product_variant_prices as $product_variant_price) {
+        foreach ($product_variant_prices as $product_variant_price) {
+            $title = explode('/', rtrim($product_variant_price['title'], '/'));
             $title = explode('/', rtrim($product_variant_price['title'], '/'));
             $productVariantPrice = [
                 'product_id' => $product->id,
             ];
 
             foreach ($title as $key => $data) {
-                if ($key == 0) {
-                    $productVariantPrice['product_variant_one'] = $tags[$key][$data];
-                }
-                if ($key == 1) {
-                    $productVariantPrice['product_variant_two'] = $tags[$key][$data];
-                }
-                if ($key == 2) {
-                    $productVariantPrice['product_variant_three'] = $tags[$key][$data];
-                }
+                $productVariantPrice[$this->getVariantKey($key)] = $tags[$key][$data];
             }
             $variantPrice = ProductVariantPrice::firstOrCreate($productVariantPrice);
 
@@ -253,22 +206,34 @@ class ProductController extends Controller
                 'price' => $product_variant_price['price'],
                 'stock' => $product_variant_price['stock'],
             ]);
+
+            if ($update) {
+                ProductVariantPrice::whereNotIn('id', $updatedVariantPrices)->where('product_id', $product->id)->delete();
+            }
         }
-
-        ProductVariantPrice::whereNotIn('id', $updatedVariantPrices)->delete();
-
-        return response()->json(['message' => 'Product updated successfully.']);
     }
 
-    /**
-     * Remove the specified resource from storage.
-     *
-     * @param \App\Models\Product $product
-     * @return \Illuminate\Http\Response
-     */
-    public
-    function destroy(Product $product)
+    private function getVariantKey($key)
     {
-        //
+        switch ($key) {
+            case 0:
+                return 'product_variant_one';
+            case 1:
+                return 'product_variant_two';
+            case 2:
+                return 'product_variant_three';
+        }
+    }
+
+    private function uploadProductImages($product_image, $product)
+    {
+        if ($product_image) {
+            foreach ($product_image as $image) {
+                ProductImage::create([
+                    'product_id' => $product->id,
+                    'file_path' => uploadBase64Image($image, 'product')
+                ]);
+            }
+        }
     }
 }

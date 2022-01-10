@@ -142,8 +142,7 @@ export default {
     },
     methods: {
         dropzoneAfterSuccess(file) {
-            console.log(file)
-            this.images.push(file)
+            this.images.push(file.dataURL)
         },
         // it will push a new object into product variant
         newVariant() {
@@ -207,15 +206,16 @@ export default {
                 }, 2000)
             }).catch(error => {
                 toastr.error(error.response.data.message);
+                _.each(error.response.data.errors, function (value, key) {
+                    toastr.error(value);
+                });
             })
-
-            console.log(product);
         }
 
 
     },
     mounted() {
-        console.log('Component mounted.')
+
     }
 }
 </script>

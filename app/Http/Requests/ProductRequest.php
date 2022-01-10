@@ -25,8 +25,12 @@ class ProductRequest extends FormRequest
     {
         return [
             'title' => 'required|min:3',
-            'sku' => 'sometimes|nullable|unique:products,sku,' . $this->id,
+            'sku' => 'sometimes|nullable|unique:products,sku,' . optional($this->product)->id,
             'description' => 'sometimes|nullable|max:1000',
+            'product_variant' => 'required|array',
+            'product_variant.*.option' => 'required|integer|exists:variants,id',
+            'product_variant.*.tags' => 'sometimes|nullable|array',
+            'product_variant_prices' => 'sometimes|nullable|array',
         ];
     }
 }

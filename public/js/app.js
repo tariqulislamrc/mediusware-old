@@ -2261,6 +2261,13 @@ __webpack_require__.r(__webpack_exports__);
 //
 //
 //
+//
+//
+//
+//
+//
+//
+//
 
 
 
@@ -2298,8 +2305,7 @@ __webpack_require__.r(__webpack_exports__);
   },
   methods: {
     dropzoneAfterSuccess: function dropzoneAfterSuccess(file) {
-      console.log(file);
-      this.images.push(file);
+      this.images.push(file.dataURL);
     },
     // it will push a new object into product variant
     newVariant: function newVariant() {
@@ -2368,13 +2374,14 @@ __webpack_require__.r(__webpack_exports__);
         }, 2000);
       })["catch"](function (error) {
         toastr.error(error.response.data.message);
+
+        _.each(error.response.data.errors, function (value, key) {
+          toastr.error(value);
+        });
       });
-      console.log(product);
     }
   },
-  mounted: function mounted() {
-    console.log('Component mounted.');
-  }
+  mounted: function mounted() {}
 });
 
 /***/ }),
@@ -2395,6 +2402,14 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var vue2_dropzone_dist_vue2Dropzone_min_css__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! vue2-dropzone/dist/vue2Dropzone.min.css */ "./node_modules/vue2-dropzone/dist/vue2Dropzone.min.css");
 /* harmony import */ var vue_input_tag__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! vue-input-tag */ "./node_modules/vue-input-tag/dist/vueInputTag.common.js");
 /* harmony import */ var vue_input_tag__WEBPACK_IMPORTED_MODULE_2___default = /*#__PURE__*/__webpack_require__.n(vue_input_tag__WEBPACK_IMPORTED_MODULE_2__);
+//
+//
+//
+//
+//
+//
+//
+//
 //
 //
 //
@@ -2532,25 +2547,26 @@ __webpack_require__.r(__webpack_exports__);
   },
   methods: {
     dropzoneAfterSuccess: function dropzoneAfterSuccess(file) {
-      console.log(file);
       this.images.push(file.dataURL);
     },
     dropzoneMounted: function dropzoneMounted() {
       var _this = this;
 
       this.product.images.forEach(function (image) {
-        var file = {
-          name: image.title,
-          type: image.type,
-          dataURL: image.file_url,
-          size: image.size
-        };
+        if (image.length > 0) {
+          var file = {
+            name: image.title,
+            type: image.type,
+            dataURL: image.file_url,
+            size: image.size
+          };
 
-        _this.$refs.myVueDropzone.manuallyAddFile(file, image.file_url);
+          _this.$refs.myVueDropzone.manuallyAddFile(file, image.file_url);
 
-        _this.$refs.myVueDropzone.dropzone.emit('thumbnail', file, file.dataURL);
+          _this.$refs.myVueDropzone.dropzone.emit('thumbnail', file, file.dataURL);
 
-        _this.images.push(image.base);
+          _this.images.push(image.base);
+        }
       });
     },
     // it will push a new object into product variant
@@ -2620,13 +2636,17 @@ __webpack_require__.r(__webpack_exports__);
       };
       axios.put('/product/' + this.product.id, product).then(function (response) {
         toastr.success(response.data.message);
+        console.log(response.data);
         setTimeout(function () {
-          window.location.href = '/product';
+          window.location.href = response.data["goto"];
         }, 2000);
       })["catch"](function (error) {
-        console.log(error);
+        toastr.error(error.response.data.message);
+
+        _.each(error.response.data.errors, function (value, key) {
+          toastr.error(value);
+        });
       });
-      console.log(product);
     }
   },
   mounted: function mounted() {}
