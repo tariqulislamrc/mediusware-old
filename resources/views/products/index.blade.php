@@ -80,9 +80,7 @@
                                     id="variant_{{ $product->id }}">
                                     @foreach($product->variantPrices as $variantPrice)
                                         <dt class="col-sm-3 pb-0">
-                                            {{ optional($variantPrice->productVariantOne)->variant }}/
-                                            {{ optional($variantPrice->productVariantTwo)->variant }}/
-                                            {{ optional($variantPrice->productVariantThree)->variant }}
+
                                         </dt>
                                         <dd class="col-sm-9">
                                             <dl class="row mb-0">

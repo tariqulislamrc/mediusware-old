@@ -29,4 +29,19 @@ class ProductVariantPrice extends Model
         return $this->belongsTo(ProductVariant::class, 'product_variant_three', 'id');
     }
 
+    public function getTitleAttribute(){
+        $title = '';
+        if ($this->productVariantOne){
+            $title .= $this->productVariantOne->variant . '/';
+        }
+        if ($this->productVariantTwo){
+            $title .= $this->productVariantTwo->variant . '/';
+        }
+        if ($this->productVariantThree){
+            $title .= $this->productVariantThree->variant . '/';
+        }
+
+        return $title;
+    }
+
 }

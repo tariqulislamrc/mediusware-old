@@ -46,4 +46,9 @@ class Product extends Model
         return $this->hasMany(ProductVariantPrice::class);
     }
 
+    public function images(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(ProductImage::class);
+    }
+
 }

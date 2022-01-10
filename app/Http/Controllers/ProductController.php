@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProductRequest;
+use App\Http\Resources\ProductResource;
 use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ProductVariant;
@@ -10,6 +11,10 @@ use App\Models\ProductVariantPrice;
 use App\Models\Variant;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Str;
+use Symfony\Component\HttpFoundation\File\File;
+use Illuminate\Support\Facades\File as StorageFile;
 
 class ProductController extends Controller
 {
@@ -128,7 +133,7 @@ class ProductController extends Controller
             ProductVariantPrice::create($productVariantPrice);
         }
 
-        return response()->json(['success' => 'Product created successfully.']);
+        return response()->json(['message' => 'Product created successfully.']);
 
     }
 
@@ -142,7 +147,7 @@ class ProductController extends Controller
     public
     function show($product)
     {
-
+        //
     }
 
     /**
@@ -152,10 +157,12 @@ class ProductController extends Controller
      * @return \Illuminate\Http\Response
      */
     public
-    function edit(Product $product)
+    function edit($product)
     {
+        $product = new ProductResource(Product::with(['images', 'productVariants', 'variantPrices'])->find($product));
+
         $variants = Variant::all();
-        return view('products.edit', compact('variants'));
+        return view('products.edit', compact('variants', 'product'));
     }
 
     /**
@@ -168,7 +175,89 @@ class ProductController extends Controller
     public
     function update(Request $request, Product $product)
     {
-        //
+        $product->update($request->only('title', 'description', 'sku'));
+
+        if ($request->product_image) {
+           foreach($product->images as $image){
+               StorageFile::delete(storage_path($image->file_path, 'public'));
+               $image->delete();
+           }
+            foreach ($request->product_image as $image) {
+                $base64File = $image;
+
+                $fileData = base64_decode(preg_replace('#^data:image/\w+;base64,#i', '', $base64File));
+
+                $tmpFilePath = sys_get_temp_dir() . '/' . Str::uuid()->toString();
+                file_put_contents($tmpFilePath, $fileData);
+
+                $tmpFile = new File($tmpFilePath);
+
+                $file = new UploadedFile(
+                    $tmpFile->getPathname(),
+                    $tmpFile->getFilename(),
+                    $tmpFile->getMimeType(),
+                    0,
+                    true // Mark it as test, since the file isn't from real HTTP POST.
+                );
+
+                $file_path =  $file->store('products', 'public');
+
+                ProductImage::create([
+                    'product_id' => $product->id,
+                    'file_path' => $file_path
+                ]);
+            }
+        }
+
+        $tags = [];
+
+
+        foreach ($request->product_variant as $key => $variant) {
+            $updateProductVariant = [];
+            foreach ($variant['tags'] as $tag_key => $tag) {
+                $productVariant = ProductVariant::firstOrCreate([
+                    'variant' => $tag,
+                    'product_id' => $product->id,
+                    'variant_id' => $variant['option'] ?? null
+                ]);
+                $tags[$key][$tag] = $productVariant->id;
+                $updateProductVariant [] = $productVariant->id;
+            }
+
+            ProductVariant::whereNotIn('id', $updateProductVariant)->where('product_id', $product->id)->where('variant_id', $variant['option'] ?? null)->delete();
+        }
+
+
+        $updatedVariantPrices = [];
+        foreach ($request->product_variant_prices as $product_variant_price) {
+            $title = explode('/', rtrim($product_variant_price['title'], '/'));
+            $productVariantPrice = [
+                'product_id' => $product->id,
+            ];
+
+            foreach ($title as $key => $data) {
+                if ($key == 0) {
+                    $productVariantPrice['product_variant_one'] = $tags[$key][$data];
+                }
+                if ($key == 1) {
+                    $productVariantPrice['product_variant_two'] = $tags[$key][$data];
+                }
+                if ($key == 2) {
+                    $productVariantPrice['product_variant_three'] = $tags[$key][$data];
+                }
+            }
+            $variantPrice = ProductVariantPrice::firstOrCreate($productVariantPrice);
+
+            $updatedVariantPrices[] = $variantPrice->id;
+            $variantPrice->update([
+                'price' => $product_variant_price['price'],
+                'stock' => $product_variant_price['stock'],
+            ]);
+        }
+
+        ProductVariantPrice::whereNotIn('id', $updatedVariantPrices)->delete();
+
+        return response()->json(['message' => 'Product updated successfully.']);
     }
 
     /**
